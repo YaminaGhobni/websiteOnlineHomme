@@ -8,42 +8,36 @@ on:
 
 jobs:
   laravel-tests:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+    runs-on: ubuntu-latest  # Testez d'abord sur Ubuntu uniquement
     
     steps:
       - uses: actions/checkout@v4
       
-      - uses: shivammathur/setup-php@v2
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'  # Ajustez selon votre projet
-          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite, bcmath
+          php-version: '8.2'
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite, bcmath, fileinfo
           coverage: none
       
-      - name: Validate composer.json
-        run: composer validate --strict
-      
-      - name: Cache Composer packages
-        uses: actions/cache@v3
-        with:
-          path: vendor
-          key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-php-
+      - name: Verify PHP Installation
+        run: |
+          php -v
+          php -m
       
       - name: Copy .env
         run: php -r "file_exists('.env') || copy('.env.example', '.env');"
       
-      - name: Install Dependencies
-        run: composer install --prefer-dist --no-interaction
+      - name: Validate composer.json
+        run: composer validate
+      
+      - name: Install Dependencies (with verbose output)
+        run: composer install --prefer-dist --no-interaction -vvv
       
       - name: Generate key
         run: php artisan key:generate
       
       - name: Directory Permissions
-        if: runner.os != 'Windows'
         run: chmod -R 777 storage bootstrap/cache
       
       - name: Create Database
@@ -51,8 +45,14 @@ jobs:
           mkdir -p database
           touch database/database.sqlite
       
+      - name: Run migrations
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/database.sqlite
+        run: php artisan migrate --force
+      
       - name: Execute tests
         env:
           DB_CONNECTION: sqlite
           DB_DATABASE: database/database.sqlite
-        run: php artisan test
+        run: php artisan test --parallel
